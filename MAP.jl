@@ -1,10 +1,12 @@
 __precompile__()
 
+
 module MAP
-    export GeneralTest
-    # using LinearLeastSquares
-    const EPS_VAL = 1e-3
-    const ITER_MAX = 5000000
+    export GenerateSamples, FriederichsAngleAB, algorithmMAP, fourpointscheme, algorithmDRM, 
+    export algorithmDRM_C, GenerateRdmPair
+    
+    # global const EPS_VAL = 1e-3
+    global const ITER_MAX = 5000000
 
     # println("Tolerance: $EPS_VAL")
 ####################################
@@ -68,7 +70,7 @@ module MAP
 ####################################
 ####################################
     function MakeTest(func,number_samples::Int64,CC,n::Int64,xzero::Vector{Float64},
-                                        file::IOStream,printfile=true,method::Int64=1)
+                                        file::IOStream,printfile=true,method::Int64=1,EPS_VAL::Float64=1e-3)
             algname = string(func)
             fname = @sprintf("tables/%d_%.1E-%s.table",samples,EPS_VAL,algname);
             open(fname,"a") do file
@@ -126,7 +128,7 @@ module MAP
 ####################################
     function  fourpointscheme(A::Matrix{Float64},a::Vector{Float64},B::Matrix{Float64},
                                         b::Vector{Float64},n::Int64,xzero::Vector{Float64},
-                                        file::IOStream,printfile=true,method::Int64=1)
+                                        file::IOStream,printfile=true,method::Int64=1, EPS_VAL::Float64=1e-3)
     #algoritmoRBLRS using 4 points in inner interaction
        #begining the projection onto A and onto B
         PA, aP = contructProjector(A,a,n)
@@ -201,7 +203,7 @@ module MAP
 ####################################
     function  algorithmMAP(A::Matrix{Float64},a::Vector{Float64},B::Matrix{Float64},
                                         b::Vector{Float64},n::Int64,xzero::Vector{Float64},
-                                        file::IOStream,printfile=true,method::Int64=1)
+                                        file::IOStream,printfile=true,method::Int64=1, EPS_VAL::Float64=1e-3)
         # Projecting onto A first
         PA, aP = contructProjector(A,a,n)
         PB, bP = contructProjector(B,b,n)
@@ -239,7 +241,7 @@ module MAP
 ####################################
     function algorithmDRM(A::Matrix{Float64},a::Vector{Float64},B::Matrix{Float64},
                                         b::Vector{Float64},n::Int64,xzero::Vector{Float64},
-                                        file::IOStream,printfile=true,method::Int64=1)
+                                        file::IOStream,printfile=true,EPS_VAL::Float64=1e-3)
         PA, aP = contructProjector(A,a,n)
         PB, bP = contructProjector(B,b,n)
         xstar = xzero
@@ -265,7 +267,7 @@ module MAP
 ####################################
     function algorithmDRM_C(A::Matrix{Float64},a::Vector{Float64},B::Matrix{Float64},
                                         b::Vector{Float64},n::Int64,xzero::Vector{Float64},
-                                        file::IOStream,printfile=true,method::Int64=1)
+                                        file::IOStream,printfile=true,EPS_VAL::Float64=1e-3)
         PA, aP = contructProjector(A,a,n)
         PB, bP = contructProjector(B,b,n)
         xstar = xzero
@@ -331,6 +333,5 @@ module MAP
 ####################################
    
 ####################################    
-    # GeneralTest(10,1,true)
 
 end

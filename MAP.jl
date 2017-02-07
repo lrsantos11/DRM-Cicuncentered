@@ -1,10 +1,9 @@
 __precompile__()
 
-
 module MAP
-    export GenerateSamples, FriederichsAngleAB, algorithmMAP, fourpointscheme, algorithmDRM, 
-    export algorithmDRM_C, GenerateRdmPair
-    
+    export GenerateSamples, FriedrichsAngleAB, algorithmMAP, fourpointscheme, algorithmDRM
+    export algorithmDRM_C, GenerateRdmPair, friedrichs
+
     # global const EPS_VAL = 1e-3
     global const ITER_MAX = 5000000
 
@@ -23,6 +22,7 @@ module MAP
             a = zeros(ma)
             b = zeros(mb)
         end
+
         return A, a, ma, B, b, mb
     end
 ####################################
@@ -68,26 +68,26 @@ module MAP
         return A, a, ma, B, b, mb
     end
 ####################################
+
 ####################################
-    function MakeTest(func,number_samples::Int64,CC,n::Int64,xzero::Vector{Float64},
-                                        file::IOStream,printfile=true,method::Int64=1,EPS_VAL::Float64=1e-3)
-            algname = string(func)
-            fname = @sprintf("tables/%d_%.1E-%s.table",samples,EPS_VAL,algname);
-            open(fname,"a") do file
-                write(file,prob_name)
-                time = @elapsed func(A,a,B,b,n,xzero,file,true,1)
-                str = @sprintf(" %10.8e\n",time)
-                # print(str)
-                print(file,str)
-            end
-        # func = algorithmMAP
-        # algname = string(func)
-        # println(algname)
-    end
+function friedrichs(A,B)
+
+    cdm = rank(A)+rank(B)-rank([A;B]);
+    C=[A;B[cdm+1:rank(B),:]];
+
+    AA=pinv(A)*A;
+    BB=pinv(B)*B;
+    CC=pinv(C)*C
+
+    M=CC+BB*AA-BB-AA;
+
+    return sqrt(eigmax(M*M'));
+
+end
 ####################################
 
 ####################################
-    function FriederichsAngleAB(A::Matrix{Float64},B::Matrix{Float64})
+    function FriedrichsAngleAB(A::Matrix{Float64},B::Matrix{Float64})
         # Calculating Friederich Angle
         QA, RA = qr(A')
         QB, RB = qr(B')
@@ -96,7 +96,10 @@ module MAP
         # angleAB = acosd(maximum(S))
         # Angle in Radians
         # angleAB = acos(maximum(S))
-        return maximum(S[2])
+        println(S[2])
+        ind = findfirst(x -> x<(1-1e-8),S[2])
+        # return maximum(S[2])
+        return S[2][ind]
     end
 ####################################
 ####################################
@@ -265,9 +268,10 @@ module MAP
     end
 ####################################
 ####################################
-    function algorithmDRM_C(A::Matrix{Float64},a::Vector{Float64},B::Matrix{Float64},
-                                        b::Vector{Float64},n::Int64,xzero::Vector{Float64},
-                                        file::IOStream,printfile=true,EPS_VAL::Float64=1e-3)
+    function algorithmDRM_C(A::Matrix{Float64},a::Vector{Float64},
+                            B::Matrix{Float64},b::Vector{Float64},
+                            n::Int64,xzero::Vector{Float64},file::IOStream,
+                            printfile=true,EPS_VAL::Float64=1e-3)
         PA, aP = contructProjector(A,a,n)
         PB, bP = contructProjector(B,b,n)
         xstar = xzero
@@ -295,6 +299,8 @@ module MAP
             xstar = med_xy + t[1]*dir_xy
             tol = norm([A;B]*xstar - [a;b],2)
             k += 2
+            println("Number of projections: $k")
+            @printf("Error = %s\n", tol)
             (k>ITER_MAX) && (warn("Maximum number of projections achievied in DRM-C"); break)
         end
         if printfile
@@ -331,7 +337,7 @@ module MAP
 
     end
 ####################################
-   
-####################################    
+
+####################################
 
 end

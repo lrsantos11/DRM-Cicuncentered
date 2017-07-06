@@ -2,10 +2,11 @@ __precompile__()
 
 module MAP
     export GenerateSamples, FriedrichsAngleAB, algorithmMAP, fourpointscheme, algorithmDRM
-    export algorithmDRM_C, GenerateRdmPair, friedrichs
+    export algorithmDRM_C, GenerateRdmPair, friedrichs, contructProjector, Projection, StartingPoint
 
-    # global const EPS_VAL = 1e-3
-    global const ITER_MAX = 5000000
+    global const ZERO_VAL = 1e-15
+    global const ITER_MAX = 1e8
+
 
     # println("Tolerance: $EPS_VAL")
 ####################################
@@ -30,7 +31,7 @@ module MAP
     function GenerateRdmPair(n::Int64,cmax::Int64,affine::Bool=true)
         n >= cmax ||  error("n must grater then common normals")
         mcex = rand(1:cmax) ## number of common normals
-        maex = rand(1:n-1-mcex) ## number of extra normals of A
+        maex = rand(1:n-3-mcex) ## number of extra normals of A
         mbex = rand(1:n-1-mcex-maex) ## number of extra normals of B
 
 
@@ -96,7 +97,7 @@ end
         # angleAB = acosd(maximum(S))
         # Angle in Radians
         # angleAB = acos(maximum(S))
-        println(S[2])
+        # println(S[2])
         ind = findfirst(x -> x<(1-1e-8),S[2])
         # return maximum(S[2])
         return S[2][ind]
@@ -150,7 +151,8 @@ end
     #   use ind = randi([1 2]) to implement random start
         tol = 1
         k =2
-        while (tol >= EPS_VAL)  || (k>ITER_MAX)
+        conv=String("itmax")
+        while (tol >= EPS_VAL)
             if (mod(ind,2) == 0)
                     b1 = xstar
                     #projection onto A
@@ -191,11 +193,11 @@ end
             tol, ind = findmin([tol_A tol_B tolac_A tolac_B])
             xstar = vectors[:,ind]
             k+=3
-            (k>ITER_MAX) && (warn("Maximum number of projections achievied in 4point"); break)
+            (k>ITER_MAX) && (warn("Maximum number of projections achievied in 4point"); conv=String("itmax"); break)
         end
         if printfile
-                str = @sprintf("    conv %7d  %10.8e",k,tol)
-                print(file,str)
+            str = @sprintf("    conv %7d  %10.8e",k,tol)
+            print(file,str)
         else
             println("Number of projections: $k")
             @printf("Error = %s\n", tol)
@@ -205,15 +207,17 @@ end
 ####################################
 ####################################
     function  algorithmMAP(A::Matrix{Float64},a::Vector{Float64},B::Matrix{Float64},
-                                        b::Vector{Float64},n::Int64,xzero::Vector{Float64},
+                                        b::Vector{Float64},n::Int64,xzero::Vector{Float64},xbar::Vector{Float64},
                                         file::IOStream,printfile=true,method::Int64=1, EPS_VAL::Float64=1e-3)
         # Projecting onto A first
         PA, aP = contructProjector(A,a,n)
         PB, bP = contructProjector(B,b,n)
         xstar = Projection(PA,aP,xzero)
         tol = 1
-        k =1
+        k = 1
+        conv=String("itmax")
         while (tol >= EPS_VAL)
+            # xbar = xstar #Looking for FixingPoint
             a1 = xstar
             #projection onto B
             b1 = Projection(PB,bP,a1)
@@ -226,11 +230,14 @@ end
                 # Closest Point Acceleration
                 xstar = accCP(a1,b1,a2)
             elseif method == 3
+                # Extrapolated Acceleration
                 xstar = accEMAP(a1,b1,a2)
             end
-            tol = norm([A;B]*xstar - [a;b],2)
+            # tol = norm(a2 - b1,2) #Gap Distance
+            tol = norm(xstar - xbar,2) #True Error
+
             k+=2
-            (k>ITER_MAX) && (warn("Maximum number of projections achievied in MAP"); break)
+            (k>ITER_MAX) && (warn("Maximum number of projections achieved in MAP"); conv=String("itmax"); break)
         end
         if printfile
                 str = @sprintf("    conv %7d  %10.8e",k,tol)
@@ -243,24 +250,34 @@ end
 ####################################
 ####################################
     function algorithmDRM(A::Matrix{Float64},a::Vector{Float64},B::Matrix{Float64},
-                                        b::Vector{Float64},n::Int64,xzero::Vector{Float64},
+                                        b::Vector{Float64},n::Int64,xstar::Vector{Float64},xbar::Vector{Float64},
                                         file::IOStream,printfile=true,EPS_VAL::Float64=1e-3)
         PA, aP = contructProjector(A,a,n)
         PB, bP = contructProjector(B,b,n)
-        xstar = xzero
-        k = 0
-        tol = norm([A;B]*xstar - [a;b],2)
+        # tol = norm([A;B]*xstar - [a;b],2)
+        tol = 1.
+        conv =  String("conv")
+        xstar =  Projection(PB,bP,xstar)  # Initial Point on span(U,V)
+        k = 1
+        rate = 0.
         while (tol >= EPS_VAL)
-            reflec = Reflection(PA,aP,xstar)
-            reflec = Reflection(PB,bP,reflec)
-            xstar = (xstar + reflec)/2;
-            tol = norm([A;B]*xstar - [a;b],2)
+            # xbar = xstar #Looking for FixingPoint
+            xold = xstar
+            ypto = Reflection(PA,aP,xstar)
+            zpto = Reflection(PB,bP,ypto)
+            xstar = 0.5*(xstar + zpto)
+            gapA = Projection(PA,aP,xstar)
+            gapB = Projection(PB,bP,xstar)
+            # tol = norm(gapA - gapB,2) #Gap Distance
+            tol = norm(xstar - xbar,2) #True Error
+            rate = tol/norm(xold-xbar,2)
             k +=2
-            (k>ITER_MAX) && (warn("Maximum number of projections achievied in DRM"); break)
+            (k>ITER_MAX) && (warn("Maximum number of projections achieved in DRM"); conv=String("itmax"); break)
         end
         if printfile
-                str = @sprintf("    conv %7d  %10.8e",k,tol)
+                str = @sprintf("    %s  %7d  %10.8e %10.8f ",conv,k,tol, rate)
                 print(file,str)
+                # println("Number of projections: $k")
         else
             println("Number of projections: $k")
             @printf("Error = %s\n", tol)
@@ -270,42 +287,54 @@ end
 ####################################
     function algorithmDRM_C(A::Matrix{Float64},a::Vector{Float64},
                             B::Matrix{Float64},b::Vector{Float64},
-                            n::Int64,xzero::Vector{Float64},file::IOStream,
+                            n::Int64,xstar::Vector{Float64},xbar::Vector{Float64},file::IOStream,
                             printfile=true,EPS_VAL::Float64=1e-3)
         PA, aP = contructProjector(A,a,n)
         PB, bP = contructProjector(B,b,n)
-        xstar = xzero
-        k = 0
         tol = 1.0
+        conv =  String("conv")
+        xstar =  Projection(PB,bP,xstar)  # Initial Point on span(U,V)
+        k = 1
+        rate = 0.
         while (tol >= EPS_VAL)
+            # xbar = xstar #Looking for FixingPoint
             ypto = Reflection(PA,aP,xstar)
             zpto = Reflection(PB,bP,ypto)
-            if norm(ypto - xstar)<EPS_VAL
-                xstar = 0.5(xstar + zpto)
-                tol = norm([A;B]*xstar - [a;b],2)
+            if norm(ypto - xstar)<ZERO_VAL
+                xold = xstar
+                xstar = 0.5*(xstar + zpto)
+                # tol = norm([A;B]*xstar - [a;b],2)
+                gapA = Projection(PA,aP,xstar)
+                gapB = Projection(PB,bP,xstar)
+                # tol = norm(gapA - gapB,2) #Gap Distance
+                tol = norm(xstar - xbar,2) #True Error
+                rate = tol/norm(xold - xbar,2)
                 continue
-            elseif norm(zpto - ypto)<EPS_VAL
-                xstar = 0.5(xstar + zpto)
-                tol = norm([A;B]*xstar - [a;b],2)
+            elseif norm(zpto - ypto)<ZERO_VAL
+                xold = xstar
+                xstar = 0.5*(xstar + zpto)
+                gapA = Projection(PA,aP,xstar)
+                gapB = Projection(PB,bP,xstar)
+                # tol = norm(gapA - gapB,2) #Gap Distance
+                tol = norm(xstar - xbar,2) #True Error
+                rate = tol/norm(xold - xbar,2)
                 continue
             end
-            v_xy = ypto - xstar
-            v_yz = zpto - ypto
-            med_xy = xstar + 0.5*(v_xy)
-            med_yz = ypto + 0.5*(v_yz)
-            dir_xy = v_yz - (dot(v_yz,v_xy)/dot(v_xy,v_xy))*v_xy
-            dir_yz = v_xy - (dot(v_xy,v_yz)/dot(v_yz,v_yz))*v_yz
-            t = [dir_xy -dir_yz]\(med_yz - med_xy)
-            xstar = med_xy + t[1]*dir_xy
-            tol = norm([A;B]*xstar - [a;b],2)
+            xold = xstar
+            xstar = FindCircumcenter(xstar,ypto,zpto)
+            gapA = Projection(PA,aP,xstar)
+            gapB = Projection(PB,bP,xstar)
+            # tol = norm(gapA - gapB,2) #Gap Distance
+            tol = norm(xstar - xbar,2) #True Error
+            rate = tol/norm(xold - xbar,2)
             k += 2
-            println("Number of projections: $k")
-            @printf("Error = %s\n", tol)
-            (k>ITER_MAX) && (warn("Maximum number of projections achievied in DRM-C"); break)
+            (k>ITER_MAX) && (warn("Maximum number of projections achieved in C-DRM"); conv=String("itmax"); break)
         end
+        # println(rate)
         if printfile
-                str = @sprintf("    conv %7d  %10.8e",k,tol)
+                str = @sprintf("    %s  %7d  %10.8e %10.8f",conv,k,tol,rate)
                 print(file,str)
+                # println("Number of projections: $k")
         else
             println("Number of projections: $k")
             @printf("Error = %s\n", tol)
@@ -314,6 +343,7 @@ end
 ####################################
 ####################################
     function accEMAP(x1,x2,x3)
+
         # x1 and x3 are in subspace A
         # x3 is in subspace B.
         # Finds the Extrapolation VonNewmann-Accelerated
@@ -337,7 +367,33 @@ end
 
     end
 ####################################
+    function FindCircumcenter(x0,x1,x2)
+    # Finds the Circuncenter of poitns x1, x2, x3, ...
+        v1 = x1 - x0
+        v2 = x2 - x0
+        M = [v1'; v2']
+        MCond = cond(M)
+        # open("MatrixCond","a") do f
+        #    # do stuff with the open file
+        #   str = @sprintf("Matrix Cond %10.8f\n",MCond)
+        #   print(f,str)
+        # end
+        # println(MCond)
+        r = M\([0.5*dot(v1,v1); 0.5*dot(v2,v2)])
+        return x0+r
+    end
+
 
 ####################################
+    function StartingPoint(n::Int64)
+        ## create a random point
+
+        x=zeros(n);
+        while norm(x)<2
+            x = randn(n);
+        end
+
+        return 10*x/norm(x);
+    end
 
 end

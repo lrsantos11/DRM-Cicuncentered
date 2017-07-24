@@ -29,7 +29,7 @@ module MAP
 ####################################
 ####################################
     function GenerateRdmPair(n::Int64,cmax::Int64,affine::Bool=true)
-        n >= cmax ||  error("n must grater then common normals")
+        n >= cmax ||  error("n must be greater then common normals")
         mcex = rand(1:cmax) ## number of common normals
         maex = rand(1:n-3-mcex) ## number of extra normals of A
         mbex = rand(1:n-1-mcex-maex) ## number of extra normals of B
@@ -378,7 +378,7 @@ end
         #   str = @sprintf("Matrix Cond %10.8f\n",MCond)
         #   print(f,str)
         # end
-        # println(MCond)
+        println(MCond)
         r = M\([0.5*dot(v1,v1); 0.5*dot(v2,v2)])
         return x0+r
     end

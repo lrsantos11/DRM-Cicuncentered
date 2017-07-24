@@ -1,10 +1,13 @@
 workspace()
 include("MAP.jl")
+include("mSet.jl")
 # using JLD
 importall MAP
+importall mSet
 global const EPS_VAL = 1e-6
 global const ZERO_VAL = 1e-15
- function GeneralTest(n::Int64 = 100,samples::Int64 = 2,restarts::Int64=1, affine::Bool=true)
+
+    function GeneralTest(n::Int64 = 100,samples::Int64 = 2,restarts::Int64=1, affine::Bool=true)
         # Fix Random
         srand(2)
         # X = R^n
@@ -259,14 +262,47 @@ global const ZERO_VAL = 1e-15
         println("Projections of DR-C: $k")
         println("Norm for xC: $tolC")
     end
+
+
+    function GeneralTestmSet(n::Int64 = 100,m::Int64 = 2,affine::Bool=false)
+        # Fix Random
+        # srand(30)
+        xstar = MAP.StartingPoint(n)
+        # println(xstar)
+        AA, R = GenerateSampleApart(n,m)
+        PA = []
+        aP = []
+        A = []
+        for J = 1:m
+            a  = zeros(size(AA[J],1))
+            PA_J, aP_J = MAP.contructProjector(AA[J],a,n)
+            push!(PA,PA_J)
+            push!(aP,aP_J)
+            if J == 1
+                A = AA[J]
+            else
+                A = vcat(A,AA[J])
+            end
+        end
+        # println(A)
+        P, p = MAP.contructProjector(A,zeros(size(A,1)),n)
+        xbar = MAP.Projection(P,p,xstar)
+
+        time = @elapsed mSet.algorithmCDRMmSet(n,m,PA,aP,xstar,xbar,false,EPS_VAL) 
+        time = @elapsed mSet.algorithmMAPmSet(n,m,PA,aP,xstar,xbar,false,EPS_VAL) 
+
+    end
+
+
+
+# testeconvex(1000)
+
+# GeneralTest(200,25,1,false)
+
+  GeneralTestmSet(50,10,false)
+
 # MAPdata = readdlm("tables/N50_Samp100_1.0E-03-MAP.table");
 
 # DRMdata = readdlm("tables/N50_Samp100_1.0E-03-DRM.table");
 
 # DRMCdata = readdlm("tables/N50_Samp100_1.0E-03-DRM-C.table");
-
-
-testeconvex(1000)
-
-# GeneralTest(200,25,1,false)
-
